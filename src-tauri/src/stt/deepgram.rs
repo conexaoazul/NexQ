@@ -334,7 +334,7 @@ impl DeepgramSTT {
         if is_final {
             log::debug!(
                 "DeepgramSTT: party={} tag={:?} text={:?}",
-                speaker, speaker_tag, &text[..text.len().min(40)]
+                speaker, speaker_tag, log_preview(&text)
             );
         }
 
@@ -771,6 +771,12 @@ impl STTProvider for DeepgramSTT {
     }
 }
 
+/// First 40 characters for debug logs. Slicing bytes would panic inside a
+/// multi-byte character (Cyrillic, CJK, accented Latin).
+fn log_preview(text: &str) -> String {
+    text.chars().take(40).collect()
+}
+
 /// The speaker ID most words carry (ties go to the lower ID), if any word has one.
 fn dominant_speaker(words: &[DeepgramWord]) -> Option<u32> {
     let mut counts: std::collections::BTreeMap<u32, usize> = std::collections::BTreeMap::new();
@@ -805,6 +811,13 @@ pub fn estimate_cost(duration_minutes: f32, streams: u32) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_preview_respects_char_boundaries() {
+        let text = "Еще раз проверка микрофона, как слышно, прием. Да, сразу.";
+        assert_eq!(log_preview(text).chars().count(), 40);
+        assert_eq!(log_preview("short"), "short");
+    }
 
     fn results_json(start: f64, duration: f64, speakers: &[u32]) -> String {
         let words: Vec<serde_json::Value> = speakers
