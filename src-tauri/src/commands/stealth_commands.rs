@@ -139,18 +139,20 @@ pub fn apply_to_new_window<R: Runtime>(window: &Window<R>) {
 
 /// Set a window's capture visibility for the stealth setting `on`.
 ///
-/// Windows: only a window on screen is excluded. A hidden, transparent
-/// WebView2 window that is excluded from capture leaves a blurred ghost of its
-/// frame on the desktop (the overlay between meetings, the launcher during
-/// one). [`track_visibility`] applies the setting as a window is shown and
-/// clears it when the window is hidden.
+/// Windows: a hidden window is left as it is. Changing the display affinity of
+/// a hidden WebView2 window makes Windows draw it again, and its frame stays on
+/// the desktop with a white client area (the dashboard while the meeting
+/// window is up) or the overlay's blur. [`track_visibility`] applies the
+/// setting just before the window is shown again.
 fn apply_setting<R: Runtime>(window: &Window<R>, on: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
-    let on = on && window.is_visible().unwrap_or(true);
+    if !window.is_visible().unwrap_or(true) {
+        return Ok(());
+    }
     set_capture_excluded(window, on)
 }
 
-/// Keep a window's capture visibility in step with whether it is shown.
+/// Give a window the stealth setting as it is shown.
 #[cfg(target_os = "windows")]
 fn track_visibility<R: Runtime>(window: &Window<R>) {
     let Ok(hwnd) = window.hwnd() else { return };
@@ -192,10 +194,10 @@ pub fn blur_behind_while_visible<R: Runtime>(window: &Window<R>) {
     }
 }
 
-/// A window subclass that follows a window being shown and hidden: it excludes
-/// the window from capture just before it is shown (when stealth mode is on)
-/// and makes it capturable again once hidden, and turns its blur-behind on
-/// and off with it.
+/// A window subclass that follows a window being shown and hidden: just before
+/// the window is shown it gets the stealth setting, and its blur-behind turns
+/// on and off with it. A window being hidden keeps its affinity (see
+/// `apply_setting`).
 #[cfg(target_os = "windows")]
 mod visibility_hook {
     use std::sync::Mutex;
@@ -208,10 +210,13 @@ mod visibility_hook {
     };
 
     const SUBCLASS_ID: usize = 0x4E58_5153; // "NXQS"
+    // WDA_EXCLUDEFROMCAPTURE = 0x11 (Windows 10 v2004+), WDA_NONE = 0.
     const WDA_EXCLUDEFROMCAPTURE: u32 = 0x0000_0011;
     const WDA_NONE: u32 = 0;
 
     static HOOKED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+    /// Windows excluded from capture (see [`set_excluded`]).
+    static EXCLUDED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
     /// Windows whose desktop blur follows their visibility.
     static BLURRED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
@@ -301,11 +306,21 @@ mod visibility_hook {
         Ok(())
     }
 
-    fn set_affinity(hwnd: HWND, excluded: bool) {
+    /// Exclude a window from capture or not (any thread), and remember it:
+    /// `GetWindowDisplayAffinity` reports no exclusion for a hidden window.
+    pub fn set_excluded(hwnd: HWND, excluded: bool) -> windows::core::Result<()> {
         let affinity = WINDOW_DISPLAY_AFFINITY(if excluded { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE });
-        if let Err(e) = unsafe { SetWindowDisplayAffinity(hwnd, affinity) } {
-            log::warn!("Stealth mode: SetWindowDisplayAffinity failed: {e}");
+        unsafe { SetWindowDisplayAffinity(hwnd, affinity) }?;
+        let mut list = EXCLUDED.lock().unwrap_or_else(|e| e.into_inner());
+        list.retain(|&h| h != hwnd.0 as isize);
+        if excluded {
+            list.push(hwnd.0 as isize);
         }
+        Ok(())
+    }
+
+    fn is_excluded(hwnd: HWND) -> bool {
+        EXCLUDED.lock().unwrap_or_else(|e| e.into_inner()).contains(&(hwnd.0 as isize))
     }
 
     unsafe extern "system" fn subclass_proc(
@@ -319,22 +334,21 @@ mod visibility_hook {
         match msg {
             WM_WINDOWPOSCHANGING => {
                 let pos = &*(lparam.0 as *const WINDOWPOS);
-                // About to be shown: hide it from capture first when stealth
-                // is on, so no frame of it reaches a screen share.
-                if pos.flags.contains(SWP_SHOWWINDOW) && super::stealth_enabled() {
-                    set_affinity(hwnd, true);
+                // About to be shown: apply the stealth setting first, so no
+                // frame of it reaches a screen share.
+                let on = super::stealth_enabled();
+                if pos.flags.contains(SWP_SHOWWINDOW) && is_excluded(hwnd) != on {
+                    if let Err(e) = set_excluded(hwnd, on) {
+                        log::warn!("Stealth mode: SetWindowDisplayAffinity failed: {e}");
+                    }
                 }
                 // About to be hidden: drop the blur first, or it stays on screen.
                 if pos.flags.contains(SWP_HIDEWINDOW) && wants_blur(hwnd) {
                     set_blur(hwnd, false);
                 }
             }
-            // Hidden: nothing of it should stay excluded (or composited).
             WM_WINDOWPOSCHANGED => {
                 let pos = &*(lparam.0 as *const WINDOWPOS);
-                if pos.flags.contains(SWP_HIDEWINDOW) {
-                    set_affinity(hwnd, false);
-                }
                 // Shown: the accent only takes on a visible window.
                 if pos.flags.contains(SWP_SHOWWINDOW) && wants_blur(hwnd) {
                     set_blur(hwnd, true);
@@ -346,6 +360,7 @@ mod visibility_hook {
                 hooked.retain(|&h| h != hwnd.0 as isize);
                 drop(hooked);
                 BLURRED.lock().unwrap_or_else(|e| e.into_inner()).retain(|&h| h != hwnd.0 as isize);
+                EXCLUDED.lock().unwrap_or_else(|e| e.into_inner()).retain(|&h| h != hwnd.0 as isize);
             }
             _ => {}
         }
@@ -399,15 +414,9 @@ fn saved_stealth(store_json: &str) -> bool {
 #[cfg(target_os = "windows")]
 fn set_capture_excluded<R: Runtime>(window: &Window<R>, excluded: bool) -> Result<(), String> {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WINDOW_DISPLAY_AFFINITY};
-
-    // WDA_EXCLUDEFROMCAPTURE = 0x11 (Windows 10 v2004+), WDA_NONE = 0.
-    const WDA_EXCLUDEFROMCAPTURE: u32 = 0x0000_0011;
-    const WDA_NONE: u32 = 0;
 
     let hwnd = window.hwnd().map_err(|e| format!("no window handle: {e}"))?;
-    let affinity = WINDOW_DISPLAY_AFFINITY(if excluded { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE });
-    unsafe { SetWindowDisplayAffinity(HWND(hwnd.0 as *mut _), affinity) }
+    visibility_hook::set_excluded(HWND(hwnd.0 as *mut _), excluded)
         .map_err(|e| format!("SetWindowDisplayAffinity failed: {e}"))
 }
 
