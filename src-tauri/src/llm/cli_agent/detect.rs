@@ -8,6 +8,7 @@ use std::time::Duration;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Find `claude.exe`: the native installer location first, then `where.exe`.
+#[cfg(windows)]
 pub fn find_claude_binary() -> Option<PathBuf> {
     if let Some(home) = std::env::var_os("USERPROFILE") {
         let p = PathBuf::from(home).join(".local").join("bin").join("claude.exe");
@@ -20,15 +21,16 @@ pub fn find_claude_binary() -> Option<PathBuf> {
 
 /// An npm install of Claude Code (`claude.cmd` on PATH). NexQ can't use it:
 /// it spawns `claude.exe` directly, never through a shell.
+#[cfg(windows)]
 pub fn find_npm_claude() -> Option<PathBuf> {
     first_line_ending(&where_claude()?, ".cmd")
 }
 
 /// `where.exe claude` output (no console window).
+#[cfg(windows)]
 fn where_claude() -> Option<String> {
     let mut cmd = std::process::Command::new("where.exe");
     cmd.arg("claude");
-    #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
@@ -38,12 +40,50 @@ fn where_claude() -> Option<String> {
 }
 
 /// First `where.exe` line ending in `ext` (case-insensitive).
+#[cfg(windows)]
 fn first_line_ending(stdout: &str, ext: &str) -> Option<PathBuf> {
     stdout
         .lines()
         .map(str::trim)
         .find(|l| l.to_lowercase().ends_with(ext))
         .map(PathBuf::from)
+}
+
+/// Find `claude`: the native installer location first (`~/.local/bin/claude`,
+/// used by `curl -fsSL https://claude.ai/install.sh | bash`), then PATH.
+#[cfg(unix)]
+pub fn find_claude_binary() -> Option<PathBuf> {
+    find_claude_in(std::env::var_os("HOME").as_deref(), std::env::var_os("PATH").as_deref())
+}
+
+/// [`find_claude_binary`] for a given `HOME` and `PATH`.
+#[cfg(unix)]
+fn find_claude_in(home: Option<&std::ffi::OsStr>, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    if let Some(home) = home {
+        let p = Path::new(home).join(".local").join("bin").join("claude");
+        if is_executable_file(&p) {
+            return Some(p);
+        }
+    }
+    std::env::split_paths(path?)
+        .map(|dir| dir.join("claude"))
+        .find(|p| is_executable_file(p))
+}
+
+/// Unix has no npm-vs-native distinction: any `claude` found via PATH or the
+/// native installer location is directly spawnable, no shell needed.
+#[cfg(unix)]
+pub fn find_npm_claude() -> Option<PathBuf> {
+    None
+}
+
+/// A regular file with at least one executable bit set.
+#[cfg(unix)]
+fn is_executable_file(p: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(p)
+        .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
 }
 
 /// How a Claude login is billed. Only a claude.ai login with a plan uses
@@ -189,6 +229,7 @@ mod tests {
         assert!(parse_auth_status("nope").is_err());
     }
 
+    #[cfg(windows)]
     #[test]
     fn where_output_picks_exe_line() {
         let out = "C:\\npm\\claude\r\nC:\\npm\\claude.cmd\r\nC:\\bin\\claude.exe\r\n";
@@ -196,10 +237,56 @@ mod tests {
         assert_eq!(first_line_ending("C:\\npm\\claude.cmd\r\n", ".exe"), None);
     }
 
+    #[cfg(windows)]
     #[test]
     fn where_output_finds_an_npm_install() {
         let out = "C:\\npm\\claude\r\nC:\\npm\\CLAUDE.CMD\r\n";
         assert_eq!(first_line_ending(out, ".cmd"), Some(PathBuf::from("C:\\npm\\CLAUDE.CMD")));
         assert_eq!(first_line_ending("", ".cmd"), None);
+    }
+
+    /// A fresh directory for one test. Tests pass `HOME`/`PATH` explicitly:
+    /// changing the process environment would race the tests running beside them.
+    #[cfg(unix)]
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("nexq-detect-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A `claude` script in `dir` with permission bits `mode`.
+    #[cfg(unix)]
+    fn claude_script(dir: &Path, mode: u32) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(dir).unwrap();
+        let bin = dir.join("claude");
+        std::fs::write(&bin, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(mode)).unwrap();
+        bin
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn finds_the_first_executable_claude_on_path() {
+        let root = temp_dir("path");
+        let plain = claude_script(&root.join("a"), 0o644);
+        let exe = claude_script(&root.join("b"), 0o755);
+        let path = std::env::join_paths([plain.parent().unwrap(), exe.parent().unwrap()]).unwrap();
+        assert_eq!(find_claude_in(None, Some(path.as_os_str())), Some(exe));
+        assert_eq!(find_claude_in(None, None), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_installer_location_takes_priority_over_path() {
+        let root = temp_dir("home");
+        let native = claude_script(&root.join("home").join(".local").join("bin"), 0o755);
+        let on_path = claude_script(&root.join("bin"), 0o755);
+        let home = root.join("home");
+        let found = find_claude_in(Some(home.as_os_str()), Some(on_path.parent().unwrap().as_os_str()));
+        assert_eq!(found, Some(native));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
