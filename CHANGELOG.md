@@ -1,3 +1,9 @@
+## [2.28.1](https://github.com/naxhq/NexQ/compare/v2.28.0...v2.28.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **stealth:** dashboard no longer turns into a white window when the meeting window comes up ([0a12b73](https://github.com/naxhq/NexQ/commit/0a12b733c17629076427dcb3acda23c5199a5704))
 # [2.28.0](https://github.com/naxhq/NexQ/compare/v2.27.2...v2.28.0) (2026-10-25)
 
 
