@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react";
 import { useScenarioStore } from "../stores/scenarioStore";
 import { BUILT_IN_SCENARIOS } from "../lib/scenarios";
+import { presetsToInstall } from "../lib/blueScenarioPresets";
+import { useBlueUiLocale } from "../lib/blueUiLocale";
 import type { AIScenario, ScenarioTemplate } from "../lib/types";
 import {
   ChevronDown,
@@ -207,6 +209,7 @@ function CreateScenarioDialog({
 // ── Main Component ──
 
 export function ScenarioSettings() {
+  const locale = useBlueUiLocale();
   const activeScenarioId = useScenarioStore((s) => s.activeScenarioId);
   const customScenarios = useScenarioStore((s) => s.customScenarios);
   const scenarioOverrides = useScenarioStore((s) => s.scenarioOverrides);
@@ -251,6 +254,14 @@ export function ScenarioSettings() {
 
   const hasAnyOverride = Object.keys(overrides).length > 0;
 
+  // Explicit opt-in only; never overwrite user-saved custom prompts.
+  const remainingBluePresets = presetsToInstall(new Set(customScenarios.map((x) => x.id)));
+  const handleInstallBluePresets = () => {
+    const pending = presetsToInstall(new Set(customScenarios.map((x) => x.id)));
+    for (const preset of pending) createCustomScenario(preset);
+    if (pending.length > 0) setActiveScenario(pending[0].id as AIScenario);
+  };
+
   const handleCreateCustom = useCallback((name: string) => {
     const newScenario: ScenarioTemplate = {
       id: `custom_${Date.now()}`,
@@ -277,6 +288,32 @@ export function ScenarioSettings() {
 
   return (
     <div className="space-y-5">
+
+      {/* Corporate prompts are optional: no changes on startup or during install */}
+      <section className="rounded-xl border border-border/30 bg-card/50 p-5" aria-label="Blue Meeting AI profiles">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="max-w-md">
+            <h3 className="text-sm font-semibold text-foreground">
+              {locale === "pt-BR" ? "Perfis Conexão Azul" : "Conexão Azul profiles"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {locale === "pt-BR"
+                ? "Copilotos comercial e técnico com regras de evidência, privacidade e revisão humana. A importação é opcional e não substitui seus cenários."
+                : "Optional sales and technical profiles with privacy and human review. Existing scenarios are not replaced."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleInstallBluePresets}
+            disabled={remainingBluePresets.length === 0}
+            className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {remainingBluePresets.length === 0
+              ? (locale === "pt-BR" ? "Perfis já adicionados" : "Profiles already added")
+              : (locale === "pt-BR" ? "Adicionar perfis" : "Add profiles")}
+          </button>
+        </div>
+      </section>
 
       {/* ── Scenario Selector ── */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
