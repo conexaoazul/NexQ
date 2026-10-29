@@ -38,7 +38,12 @@ interface ScenarioState {
     value: string
   ) => void;
   resetScenarioOverrides: (scenarioId: string) => void;
+  resetPromptOverride: (
+    scenarioId: string,
+    field: keyof Pick<ScenarioTemplate, "system_prompt" | "summary_prompt" | "question_detection_prompt">,
+  ) => void;
   createCustomScenario: (template: ScenarioTemplate) => void;
+  updateCustomScenario: (id: string, patch: Partial<ScenarioTemplate>) => void;
   deleteCustomScenario: (id: string) => void;
   cloneScenario: (sourceId: string, newName: string) => ScenarioTemplate | null;
 
@@ -97,9 +102,42 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     });
   },
 
+  resetPromptOverride: (scenarioId, field) => {
+    set((s) => {
+      const existing = s.scenarioOverrides[scenarioId];
+      if (!existing || !(field in existing)) return s;
+      const next = { ...existing };
+      delete next[field];
+      const updated = { ...s.scenarioOverrides };
+      if (Object.keys(next).length) updated[scenarioId] = next;
+      else delete updated[scenarioId];
+      persistValue("scenarioOverrides", updated);
+      return { scenarioOverrides: updated };
+    });
+  },
+
   createCustomScenario: (template) => {
     set((s) => {
+      if (s.customScenarios.some((scenario) => scenario.id === template.id)) return s;
       const updated = [...s.customScenarios, template];
+      persistValue("customScenarios", updated);
+      return { customScenarios: updated };
+    });
+  },
+
+  updateCustomScenario: (id, patch) => {
+    // Restrict edits to prompt fields; retain ID, name and ownership.
+    const changes = {
+      ...(patch.system_prompt !== undefined && { system_prompt: patch.system_prompt }),
+      ...(patch.summary_prompt !== undefined && { summary_prompt: patch.summary_prompt }),
+      ...(patch.question_detection_prompt !== undefined && { question_detection_prompt: patch.question_detection_prompt }),
+    };
+    if (Object.keys(changes).length === 0) return;
+    set((s) => {
+      if (!s.customScenarios.some((scenario) => scenario.id === id)) return s;
+      const updated = s.customScenarios.map((scenario) =>
+        scenario.id === id ? { ...scenario, ...changes } : scenario,
+      );
       persistValue("customScenarios", updated);
       return { customScenarios: updated };
     });
