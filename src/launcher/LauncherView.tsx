@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useMeetingStore } from "../stores/meetingStore";
 import { useConfigStore } from "../stores/configStore";
+import { blueTr, useBlueUiLocale } from "../lib/blueUiLocale";
 import { useContextStore } from "../stores/contextStore";
 import { useRagStore } from "../stores/ragStore";
 import { searchMeetings, deleteMeeting, renameMeeting } from "../lib/ipc";
@@ -64,6 +65,8 @@ type MeetingFilter = "all" | "favorites" | "with_summary" | "online" | "in_perso
 // ════════════════════════════════════════════════════════════════
 
 export function LauncherView() {
+  const locale = useBlueUiLocale();
+  const t = (value: string) => blueTr(value, locale);
   const setCurrentView = useMeetingStore((s) => s.setCurrentView);
   const recentMeetings = useMeetingStore((s) => s.recentMeetings);
   const loadRecentMeetings = useMeetingStore((s) => s.loadRecentMeetings);
@@ -253,8 +256,8 @@ export function LauncherView() {
       {/* ═══ HEADER ═══ */}
       <header className="dash-header flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-border/20">
         <div className="flex items-center gap-2.5">
-          <img src="/nexq-icon.png" alt="NexQ" className="h-7 w-7 rounded-lg" />
-          <span className="text-sm font-bold tracking-tight text-foreground">NexQ</span>
+          <img src="/nexq-icon.png" alt="Blue Meeting AI" className="h-7 w-7 rounded-lg" />
+          <span className="text-sm font-bold tracking-tight text-foreground">Blue Meeting AI</span>
         </div>
 
         {/* Active meeting in header */}
@@ -295,8 +298,8 @@ export function LauncherView() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search meetings..."
-                aria-label="Search meetings"
+                placeholder={locale === "pt-BR" ? "Pesquisar reuniões..." : "Search meetings..."}
+                aria-label={t("Search meetings")}
                 className="w-full rounded-lg border border-border/20 bg-background/40 py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground/40 transition-all focus:border-primary/40 focus:bg-background/60 focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
               {searchQuery && (
@@ -383,7 +386,7 @@ export function LauncherView() {
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-bold tracking-tight">
-                    {isStarting ? "Starting..." : "Start Meeting"}
+                    {isStarting ? (locale === "pt-BR" ? "Iniciando..." : "Starting...") : t("Start Meeting")}
                   </div>
                   <div className="text-meta font-normal text-white/50">
                     {rememberedMeetingSetup
@@ -522,7 +525,7 @@ export function LauncherView() {
         <div className="flex items-center gap-2 pr-5 text-xs text-muted-foreground/60">
           <span>&copy; {new Date().getFullYear()} {NEXQ_DEVELOPER}</span>
           <span className="text-muted-foreground/40">|</span>
-          <span className="font-medium">NexQ v{NEXQ_VERSION}</span>
+          <span className="font-medium">Blue Meeting AI (NexQ) v{NEXQ_VERSION}</span>
         </div>
       </footer>
 
@@ -542,7 +545,7 @@ export function LauncherView() {
           <div className="w-[380px] rounded-2xl border border-border/40 bg-card p-5 shadow-2xl">
             <div className="mb-1 flex items-center gap-2">
               <Trash2 className="h-4.5 w-4.5 text-destructive" aria-hidden="true" />
-              <h3 className="text-sm font-semibold text-foreground">Delete All Meetings</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t("Delete All Meetings")}</h3>
             </div>
             <p className="mb-5 text-xs text-muted-foreground">
               This will permanently delete all <span className="font-semibold text-foreground">{recentMeetings.length}</span> meetings and their transcripts. This action cannot be undone.
@@ -581,7 +584,7 @@ export function LauncherView() {
           <div className="w-[380px] rounded-2xl border border-border/40 bg-card p-5 shadow-2xl">
             <div className="mb-1 flex items-center gap-2">
               <AlertTriangle className="h-4.5 w-4.5 text-warning" aria-hidden="true" />
-              <h3 className="text-sm font-semibold text-foreground">Meeting in Progress</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t("Meeting in Progress")}</h3>
             </div>
             <p className="mb-5 text-xs text-muted-foreground">
               &ldquo;{activeMeeting?.title}&rdquo; is still active.
