@@ -1608,7 +1608,7 @@ async fn create_stt_provider_for_party(
                     // by trying offline discovery first.
                     let offline_files = crate::stt::local_engines::model_discovery::discover_offline_model_files(&model_dir);
                     if let Ok(offline) = offline_files {
-                        // Non-transducer model → use offline sidecar (sherpa-onnx-offline.exe)
+                        // Non-transducer model → use the sherpa-onnx offline program
                         let binary = find_offline_binary_for_state(state);
                         match binary {
                             Some(binary_path) => {
@@ -1634,8 +1634,7 @@ async fn create_stt_provider_for_party(
                             }
                             None => {
                                 crate::stt::emit_stt_debug(app, "error", "stt",
-                                    &format!("[{}] sherpa-onnx-offline.exe not found. Download Sherpa-ONNX binary in Settings.",
-                                        party_role));
+                                    &format!("[{}] {}", party_role, missing_offline_binary(state)));
                                 Ok(None)
                             }
                         }
@@ -1732,7 +1731,7 @@ async fn create_stt_provider_for_party(
                                     }
                                     None => {
                                         crate::stt::emit_stt_debug(app, "error", "stt",
-                                            &format!("[{}] sherpa-onnx-offline.exe not found.", party_role));
+                                            &format!("[{}] {}", party_role, missing_offline_binary(state)));
                                         Ok(None)
                                     }
                                 }
@@ -1756,11 +1755,21 @@ async fn create_stt_provider_for_party(
     }
 }
 
-/// Find the sherpa-onnx-offline.exe binary from the ModelManager's models directory.
+/// Find the sherpa-onnx offline program from the ModelManager's models directory.
 fn find_offline_binary_for_state(state: &AppState) -> Option<std::path::PathBuf> {
     let model_mgr = state.model_manager.as_ref()?;
     let mgr = model_mgr.lock().ok()?;
     crate::stt::sherpa_offline::find_offline_binary(mgr.models_dir())
+}
+
+/// Dev Log message for a model whose offline program is missing.
+fn missing_offline_binary(state: &AppState) -> String {
+    let models_dir = state
+        .model_manager
+        .as_ref()
+        .and_then(|m| m.lock().ok().map(|mgr| mgr.models_dir().to_path_buf()))
+        .unwrap_or_default();
+    crate::stt::sherpa_offline::missing_binary_message(&models_dir)
 }
 
 /// Find any downloaded model for an engine (fallback when requested model isn't available).
