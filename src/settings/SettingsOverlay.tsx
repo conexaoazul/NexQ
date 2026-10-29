@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useMeetingStore } from "../stores/meetingStore";
 import { useConfigStore } from "../stores/configStore";
+import { blueTr, useBlueUiLocale } from "../lib/blueUiLocale";
 import { GeneralSettings } from "./GeneralSettings";
 import { AboutSettings } from "./AboutSettings";
 import { LLMSettings } from "./LLMSettings";
@@ -93,6 +94,8 @@ interface SettingsOverlayProps {
 }
 
 export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
+  const locale = useBlueUiLocale();
+  const t = (text: string) => blueTr(text, locale);
   const setSettingsOpen = useMeetingStore((s) => s.setSettingsOpen);
   const setCurrentView = useMeetingStore((s) => s.setCurrentView);
   const previousView = useMeetingStore((s) => s.previousView);
@@ -188,7 +191,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
     }
   }, [isModal, handleCloseModal, setCurrentView]);
 
-  const currentTabLabel = TAB_LABELS[activeTab] ?? "Settings";
+  const currentTabLabel = t(TAB_LABELS[activeTab] ?? "Settings");
 
   // Wider content area for two-column settings pages
   const contentMaxW = activeTab === "ai_actions" || activeTab === "translation" ? "max-w-4xl" : "max-w-2xl";
@@ -208,7 +211,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Settings"
+          aria-label={t("Settings")}
           className={`w-[640px] max-h-[520px] flex flex-col rounded-xl border border-border/40 bg-card shadow-2xl shadow-black/20 transition-all duration-200 ${
             isVisible
               ? "opacity-100 scale-100 translate-y-0"
@@ -218,21 +221,21 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border/30 px-5 py-3.5">
-            <h2 className="text-base font-semibold text-foreground">Settings</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("Settings")}</h2>
             <div className="flex items-center gap-1">
               <button
                 onClick={handleRunWizard}
                 className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground cursor-pointer"
-                title="Run Setup Wizard"
-                aria-label="Run setup wizard"
+                title={t("Run Setup Wizard")}
+                aria-label={t("Run setup wizard")}
               >
                 <Wand2 className="h-4 w-4" />
               </button>
               <button
                 onClick={handleCloseModal}
                 className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground cursor-pointer"
-                title="Close (Esc)"
-                aria-label="Close settings"
+                title={t("Close (Esc)")}
+                aria-label={t("Close settings")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -240,7 +243,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
           </div>
 
           {/* Tab Navigation (horizontal, uses flat list) */}
-          <div className="flex border-b border-border/30 px-2 overflow-x-auto" role="tablist" aria-label="Settings navigation">
+          <div className="flex border-b border-border/30 px-2 overflow-x-auto" role="tablist" aria-label={t("Settings navigation")}>
             {ALL_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -258,7 +261,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
                   activeTab === tab.id ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"
                 }`} />
                 {tab.icon}
-                {tab.label}
+                {t(tab.label)}
               </button>
             ))}
           </div>
@@ -282,22 +285,22 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
           <button
             onClick={handleBack}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
-            title="Back to Launcher"
-            aria-label="Back to launcher"
+            title={locale === "pt-BR" ? "Voltar ao painel" : "Back to Launcher"}
+            aria-label={locale === "pt-BR" ? "Voltar ao painel" : "Back to launcher"}
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Back</span>
+            <span>{t("Back")}</span>
           </button>
         </div>
 
         {/* Grouped Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 pt-3 pb-1" role="tablist" aria-label="Settings navigation">
+        <nav className="flex-1 overflow-y-auto px-3 pt-3 pb-1" role="tablist" aria-label={t("Settings navigation")}>
           {TAB_GROUPS.map((group, gi) => (
-            <div key={group.label} className={gi > 0 ? "mt-4" : ""}>
+            <div key={t(group.label)} className={gi > 0 ? "mt-4" : ""}>
               {/* Group label */}
               <div className="mb-1 px-3 flex items-center gap-2">
                 <span className="text-meta font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  {group.label}
+                  {t(group.label)}
                 </span>
                 <div className="flex-1 h-px bg-primary/10" />
               </div>
@@ -327,7 +330,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
                       }`}>
                         {tab.icon}
                       </span>
-                      {tab.label}
+                      {t(tab.label)}
                     </button>
                   );
                 })}
@@ -341,11 +344,11 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
           <button
             onClick={handleRunWizard}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground cursor-pointer"
-            title="Run Setup Wizard"
-            aria-label="Run setup wizard"
+            title={t("Run Setup Wizard")}
+            aria-label={t("Run setup wizard")}
           >
             <Wand2 className="h-4 w-4" />
-            <span>Run Setup Wizard</span>
+            <span>{t("Run Setup Wizard")}</span>
           </button>
         </div>
       </aside>
