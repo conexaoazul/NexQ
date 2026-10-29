@@ -13,6 +13,10 @@ use crate::state::AppState;
 /// "Skip this version"). Written by the frontend (`useUpdater`); read at quit.
 const SETTINGS_STORE: &str = "nexq-settings.json";
 const AUTO_UPDATE_KEY: &str = "auto_update";
+
+// Blue Meeting AI lab builds have no dedicated signed updater channel.
+// Guard every Rust update entrypoint, not just the React buttons.
+const BLUE_LAB_UPDATES_DISABLED: bool = true;
 const SKIPPED_VERSION_KEY: &str = "skipped_version";
 
 /// How long Restart waits for the last recording to finish saving.
@@ -75,6 +79,9 @@ pub struct PendingUpdate {
 /// app is already up-to-date.
 #[command]
 pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    if BLUE_LAB_UPDATES_DISABLED {
+        return Err("Blue Meeting AI QA: updates disabled until a signed release channel exists".into());
+    }
     let updater = app.updater().map_err(|e| format!("Failed to get updater: {}", e))?;
 
     let update = updater
@@ -96,6 +103,9 @@ pub async fn download_update(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<UpdateInfo, String> {
+    if BLUE_LAB_UPDATES_DISABLED {
+        return Err("Blue Meeting AI QA: update download disabled".into());
+    }
     if state.update_downloading.swap(true, Ordering::SeqCst) {
         return Err("An update download is already in progress".to_string());
     }
@@ -189,6 +199,9 @@ async fn quit_variant(app: &AppHandle, version: &str) -> Option<Update> {
 /// The downloaded update waiting to be installed, if any.
 #[command]
 pub async fn get_pending_update(state: State<'_, AppState>) -> Result<Option<UpdateInfo>, String> {
+    if BLUE_LAB_UPDATES_DISABLED {
+        return Ok(None);
+    }
     let pending = state
         .pending_update
         .lock()
@@ -208,6 +221,9 @@ pub async fn get_pending_update(state: State<'_, AppState>) -> Result<Option<Upd
 /// after the wait.
 #[command]
 pub async fn install_update_now(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if BLUE_LAB_UPDATES_DISABLED {
+        return Err("Blue Meeting AI QA: update installation disabled".into());
+    }
     if state.meeting_active.load(Ordering::SeqCst) {
         return Err("End the meeting before updating".to_string());
     }
@@ -320,6 +336,10 @@ pub fn quit_action(
 
 /// `RunEvent::ExitRequested` handler (tray Quit calls `app.exit(0)`).
 pub fn on_exit_requested(app: &AppHandle, api: &ExitRequestApi) {
+    if BLUE_LAB_UPDATES_DISABLED {
+        // No installer may run during shutdown in this QA edition.
+        return;
+    }
     let state = app.state::<AppState>();
 
     let pending_version = state
@@ -373,6 +393,9 @@ fn setting(app: &AppHandle, key: &str) -> Option<serde_json::Value> {
 
 /// "Automatic updates" preference; defaults to on when unset or unreadable.
 fn auto_update_enabled(app: &AppHandle) -> bool {
+    if BLUE_LAB_UPDATES_DISABLED {
+        return false;
+    }
     setting(app, AUTO_UPDATE_KEY)
         .and_then(|v| v.as_bool())
         .unwrap_or(true)
