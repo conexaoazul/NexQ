@@ -35,6 +35,8 @@ import {
 const STORE_NAME = "nexq-settings.json";
 const SKIPPED_VERSION_KEY = "skipped_version";
 const AUTO_UPDATE_KEY = "auto_update";
+// Blue Meeting AI has no signed update feed yet. Never check/install upstream releases.
+const BLUE_EDITION_NO_UPDATER = true;
 
 const STARTUP_DELAY_MS = 10_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -81,6 +83,10 @@ async function broadcastPrefs(): Promise<void> {
 /** Load persisted preferences and any update already downloaded by Rust. */
 export async function hydrateUpdater(): Promise<void> {
   const updater = useUpdaterStore.getState();
+  if (BLUE_EDITION_NO_UPDATER) {
+    updater.setAutoUpdate(false);
+    return;
+  }
   try {
     const store = await settingsStore();
     const skipped = await store.get<string>(SKIPPED_VERSION_KEY);
@@ -106,6 +112,10 @@ export async function hydrateUpdater(): Promise<void> {
  * download after a manual check counts as explicit).
  */
 export async function checkForUpdates(opts?: { manual?: boolean }): Promise<void> {
+  if (BLUE_EDITION_NO_UPDATER) {
+    useUpdaterStore.getState().failCheck("Atualizações desativadas nesta edição de laboratório.");
+    return;
+  }
   const { phase, startCheck } = useUpdaterStore.getState();
   if (phase === "checking" || phase === "downloading" || phase === "ready") return;
 
@@ -130,6 +140,7 @@ export async function checkForUpdates(opts?: { manual?: boolean }): Promise<void
  * agrees with what the user chose.
  */
 export async function downloadUpdateNow(opts?: { explicit?: boolean }): Promise<void> {
+  if (BLUE_EDITION_NO_UPDATER) return;
   const { phase, version, skippedVersion, startDownload } = useUpdaterStore.getState();
   if (phase === "downloading" || phase === "ready") return;
 
@@ -209,6 +220,7 @@ export async function endMeetingFromThisWindow(): Promise<boolean> {
  * before installing. Never installs if the meeting didn't end cleanly.
  */
 export async function restartToUpdate(): Promise<void> {
+  if (BLUE_EDITION_NO_UPDATER) return;
   if (useMeetingStore.getState().activeMeeting) {
     const { confirm } = await import("@tauri-apps/plugin-dialog");
     const ok = await confirm(
@@ -236,6 +248,10 @@ export async function restartToUpdate(): Promise<void> {
 }
 
 export async function setAutoUpdate(enabled: boolean): Promise<void> {
+  if (BLUE_EDITION_NO_UPDATER) {
+    useUpdaterStore.getState().setAutoUpdate(false);
+    return;
+  }
   useUpdaterStore.getState().setAutoUpdate(enabled);
   await persist(AUTO_UPDATE_KEY, enabled);
   await broadcastPrefs();
@@ -254,6 +270,10 @@ export async function skipVersion(version: string): Promise<void> {
 /** Runs the update loop. Mount once at the app root; active only in the launcher window. */
 export function useUpdater(): void {
   useEffect(() => {
+    if (BLUE_EDITION_NO_UPDATER) {
+      useUpdaterStore.getState().setAutoUpdate(false);
+      return;
+    }
     let label = "";
     try {
       label = getCurrentWebviewWindow().label;
