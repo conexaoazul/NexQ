@@ -671,10 +671,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building NexQ")
         .run(|app, event| {
+            // How NexQ ends up quitting, for bug reports (a window closing,
+            // an exit request, or the OS terminating the app).
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+                log::info!("Window '{label}' closed");
+            }
             // Tray Quit (`app.exit(0)`) and any other exit request: install a
             // downloaded update first (exits inside the call on success), or
             // defer the quit while the last recording is still saving.
             if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+                let meeting_active = app.state::<AppState>().meeting_active.load(std::sync::atomic::Ordering::SeqCst);
+                log::info!("Exit requested (code {code:?}, meeting active: {meeting_active})");
                 if *code != Some(tauri::RESTART_EXIT_CODE) {
                     updater_commands::on_exit_requested(app, api);
                 }
@@ -683,8 +690,11 @@ pub fn run() {
             // process exits elsewhere (e.g. inside an update install), the
             // children still see stdin EOF and exit on their own.
             if let tauri::RunEvent::Exit = &event {
+                let meeting_active = app.state::<AppState>().meeting_active.load(std::sync::atomic::Ordering::SeqCst);
+                log::info!("NexQ is exiting (meeting active: {meeting_active})");
                 let sessions = app.state::<AppState>().agent_sessions.clone();
                 tauri::async_runtime::block_on(sessions.close_all());
+                logging::flush(std::time::Duration::from_millis(500));
             }
         });
 }

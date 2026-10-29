@@ -143,6 +143,23 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_docx_text_from_a_deflated_archive() {
+        use std::io::Write;
+        let path = std::env::temp_dir().join(format!("nexq-docx-{}.docx", std::process::id()));
+        {
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("word/document.xml", options).unwrap();
+            zip.write_all(br#"<w:body><w:p><w:r><w:t>Quarterly plan</w:t></w:r></w:p></w:body>"#).unwrap();
+            zip.finish().unwrap();
+        }
+        let text = extract_docx_text(path.to_str().unwrap());
+        let _ = std::fs::remove_file(&path);
+        assert!(text.unwrap().contains("Quarterly plan"));
+    }
+
+    #[test]
     fn test_extract_text_unsupported() {
         let result = extract_text("test.xyz", "xyz");
         assert!(result.is_err());

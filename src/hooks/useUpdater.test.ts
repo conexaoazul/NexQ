@@ -41,68 +41,33 @@ function windowEnded(window: string) {
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
-describe("restartToUpdate", () => {
+describe("restartToUpdate — Blue Meeting QA fail-closed", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     listeners.clear();
     emitted.length = 0;
     confirm.mockReset();
     installUpdateNow.mockReset();
-    installUpdateNow.mockResolvedValue(undefined);
     useToastStore.setState({ toasts: [] });
     useMeetingStore.setState({ activeMeeting: null });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+  afterEach(() => vi.useRealTimers());
 
-  it("installs right away when no meeting is active", async () => {
+  it("does not check, download or install updates while idle", async () => {
     await restartToUpdate();
-
     expect(confirm).not.toHaveBeenCalled();
-    expect(installUpdateNow).toHaveBeenCalledTimes(1);
-  });
-
-  it("does nothing when the user cancels the meeting prompt", async () => {
-    useMeetingStore.setState({ activeMeeting: { id: "m1" } as never });
-    confirm.mockResolvedValue(false);
-
-    await restartToUpdate();
-
+    expect(installUpdateNow).not.toHaveBeenCalled();
     expect(emitted).not.toContain("tray_stop_meeting");
-    expect(installUpdateNow).not.toHaveBeenCalled();
   });
 
-  it("ends the meeting in every window before installing", async () => {
-    useMeetingStore.setState({ activeMeeting: { id: "m1" } as never });
-    confirm.mockResolvedValue(true);
-
-    const run = restartToUpdate();
-    await flush();
-    expect(emitted).toContain("tray_stop_meeting");
-
-    windowEnded("launcher");
-    await flush();
+  it("does not interrupt a live meeting to install updates", async () => {
+    useMeetingStore.setState({ activeMeeting: { id: "qa-active" } as never });
+    await restartToUpdate();
+    expect(confirm).not.toHaveBeenCalled();
     expect(installUpdateNow).not.toHaveBeenCalled();
-
-    windowEnded("overlay");
-    await run;
-    expect(installUpdateNow).toHaveBeenCalledTimes(1);
-  });
-
-  it("aborts the install and warns if a window doesn't finish ending the meeting", async () => {
-    useMeetingStore.setState({ activeMeeting: { id: "m1" } as never });
-    confirm.mockResolvedValue(true);
-
-    const run = restartToUpdate();
-    await flush();
-    windowEnded("launcher");
-    await vi.advanceTimersByTimeAsync(MEETING_END_TIMEOUT_MS);
-    await run;
-
-    expect(installUpdateNow).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.some((t) => t.type === "error")).toBe(true);
+    expect(emitted).not.toContain("tray_stop_meeting");
+    expect(useMeetingStore.getState().activeMeeting?.id).toBe("qa-active");
   });
 });
 

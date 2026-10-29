@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useConfigStore } from "../../stores/configStore";
+import { blueTr, useBlueUiLocale } from "../../lib/blueUiLocale";
 import { hasApiKey } from "../../lib/ipc";
 import type { STTProviderType, MeetingAudioConfig } from "../../lib/types";
 import {
@@ -66,6 +67,8 @@ const PROVIDERS: ProviderChoice[] = [
 ];
 
 export function STTSetupStep() {
+  const locale = useBlueUiLocale();
+  const t = (text: string) => blueTr(text, locale);
   const meetingAudioConfig = useConfigStore((s) => s.meetingAudioConfig);
   const setMeetingAudioConfig = useConfigStore((s) => s.setMeetingAudioConfig);
 
@@ -113,10 +116,10 @@ export function STTSetupStep() {
           <Globe className="h-7 w-7 text-primary" />
         </div>
         <h2 className="text-2xl font-bold text-foreground">
-          Speech-to-Text Setup
+          {t("Speech-to-Text Setup")}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          Choose how each party's audio gets transcribed.
+          {t("Choose how each party's audio gets transcribed.")}
         </p>
       </div>
 
@@ -124,8 +127,9 @@ export function STTSetupStep() {
         {/* Recommended free setup banner */}
         <div className="rounded-xl border border-success/20 bg-success/5 px-4 py-3">
           <p className="text-xs text-success leading-relaxed">
-            <strong>Recommended (Free):</strong> Web Speech for You + Windows
-            Native for Them. No API keys needed!
+            {locale === "pt-BR"
+              ? "Recomendação local: Whisper.cpp para sua voz e para os participantes, após instalar e testar o modelo PT-BR. Web Speech pode usar serviços do navegador."
+              : "Recommended local setup: Whisper.cpp for both parties after installing and testing a supported model. Web Speech may use a browser service."}
           </p>
         </div>
 
@@ -133,9 +137,9 @@ export function STTSetupStep() {
         <div>
           <label className="mb-3 flex items-center gap-2.5 text-sm font-medium text-foreground">
             <span className="rounded-lg bg-primary/10 px-2 py-1 text-meta font-semibold uppercase tracking-wide text-primary">
-              You
+              {t("You")}
             </span>
-            STT Provider
+            {t("STT Provider")}
           </label>
           <div className="grid grid-cols-1 gap-2">
             {PROVIDERS.map((p) => (
@@ -154,7 +158,7 @@ export function STTSetupStep() {
         <div>
           <label className="mb-3 flex items-center gap-2.5 text-sm font-medium text-foreground">
             <span className="rounded-lg bg-muted px-2 py-1 text-meta font-semibold uppercase tracking-wide text-muted-foreground">
-              Them
+              {t("Them")}
             </span>
             STT Provider
           </label>
@@ -170,7 +174,7 @@ export function STTSetupStep() {
             ))}
           </div>
           <p className="mt-1 text-meta text-muted-foreground">
-            Web Speech API is not available for "Them" — it only works with the browser's microphone.
+            {t('Web Speech API is not available for "Them" — it only works with the browser\'s microphone.')}
           </p>
         </div>
       </div>
@@ -189,6 +193,8 @@ function ProviderButton({
   hasKey: boolean;
   onSelect: () => void;
 }) {
+  const locale = useBlueUiLocale();
+  const t = (text: string) => blueTr(text, locale);
   return (
     <button
       onClick={onSelect}
@@ -204,11 +210,11 @@ function ProviderButton({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground">
-            {provider.label}
+            {t(provider.label)}
           </span>
           {provider.free && (
             <span className="rounded-md bg-success/10 px-1.5 py-0.5 text-meta font-semibold text-success">
-              FREE
+              {t("FREE")}
             </span>
           )}
           {provider.requiresKey && hasKey && (
@@ -219,7 +225,7 @@ function ProviderButton({
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">
-          {provider.description}
+          {t(provider.description)}
         </p>
       </div>
     </button>

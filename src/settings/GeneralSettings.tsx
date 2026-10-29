@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useConfigStore } from "../stores/configStore";
+import { blueTr, setBlueUiLocale, useBlueUiLocale, type BlueUiLocale } from "../lib/blueUiLocale";
 import { FolderOpen, Sun, Moon, Monitor } from "lucide-react";
 import type { ThemeMode } from "../lib/types";
 import { Eye } from "lucide-react";
@@ -7,6 +8,8 @@ import { StealthSettings } from "./StealthSettings";
 import { MeetingDetectionSettings } from "./MeetingDetectionSettings";
 
 export function GeneralSettings() {
+  const locale = useBlueUiLocale();
+  const t = (text: string) => blueTr(text, locale);
   const theme = useConfigStore((s) => s.theme);
   const setTheme = useConfigStore((s) => s.setTheme);
   const autoSummary = useConfigStore((s) => s.autoSummary);
@@ -20,34 +23,54 @@ export function GeneralSettings() {
   const handleChangeDataDir = useCallback(async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ directory: true, title: "Select Data Directory" });
+      const selected = await open({ directory: true, title: t("Select Data Directory") });
       if (selected && typeof selected === "string") {
         useConfigStore.getState().setDataDirectory(selected);
       }
     } catch (err) {
       console.error("Failed to open directory picker:", err);
     }
-  }, []);
+  }, [locale]);
 
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
-    { value: "dark", label: "Dark", icon: <Moon className="h-3.5 w-3.5" /> },
-    { value: "light", label: "Light", icon: <Sun className="h-3.5 w-3.5" /> },
+    { value: "dark", label: t("Dark"), icon: <Moon className="h-3.5 w-3.5" /> },
+    { value: "light", label: t("Light"), icon: <Sun className="h-3.5 w-3.5" /> },
     {
       value: "system",
-      label: "System",
+      label: t("System"),
       icon: <Monitor className="h-3.5 w-3.5" />,
     },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Blue Meeting interface language — independent from STT language */}
+      <div className="rounded-xl border border-border/30 bg-card/50 p-5">
+        <label htmlFor="blue-ui-language" className="text-sm font-medium text-foreground">
+          {t("Interface language")}
+        </label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("Changes only the app interface, not the spoken language used for transcription.")}
+        </p>
+        <select
+          id="blue-ui-language"
+          aria-label={t("Interface language")}
+          value={locale}
+          onChange={(event) => setBlueUiLocale(event.target.value as BlueUiLocale)}
+          className="mt-3 w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm text-foreground"
+        >
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="en-US">English (US)</option>
+        </select>
+      </div>
+
       {/* Theme Toggle */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-sm font-medium text-foreground">Theme</label>
+            <label className="text-sm font-medium text-foreground">{t("Theme")}</label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Choose your preferred appearance
+              {t("Choose your preferred appearance")}
             </p>
           </div>
           <div className="flex rounded-lg border border-border/50 bg-secondary/30 p-0.5">
@@ -77,16 +100,16 @@ export function GeneralSettings() {
 
       {/* Toggle Options */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5 space-y-5">
-        <h3 className="text-sm font-semibold text-primary/80">Behavior</h3>
+        <h3 className="text-sm font-semibold text-primary/80">{t("Behavior")}</h3>
 
         {/* Auto-Summary Toggle */}
         <div className="flex items-center justify-between">
           <div>
             <label className="text-sm font-medium text-foreground">
-              Auto-Summary
+              {t("Auto-Summary")}
             </label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Generate meeting summary when meeting ends
+              {t("Generate meeting summary when meeting ends")}
             </p>
           </div>
           <button
@@ -112,10 +135,10 @@ export function GeneralSettings() {
         <div className="flex items-center justify-between">
           <div>
             <label className="text-sm font-medium text-foreground">
-              Start on Login
+              {t("Start on Login")}
             </label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Launch NexQ automatically when you log in
+              {t("Launch NexQ automatically when you log in")}
             </p>
           </div>
           <button
@@ -139,7 +162,7 @@ export function GeneralSettings() {
       {/* Moved notice */}
       <div className="rounded-xl border border-info/20 bg-info/5 px-5 py-3">
         <p className="text-xs text-info/80">
-          Context Window, Auto-Trigger, and AI instructions have moved to the <strong className="text-info">AI Actions</strong> tab.
+          {t("Context Window, Auto-Trigger, and AI instructions have moved to the")} <strong className="text-info">{t("AI Actions")}</strong> tab.
         </p>
       </div>
 
@@ -149,9 +172,9 @@ export function GeneralSettings() {
           <div className="flex items-center gap-2">
             <Eye className="h-3.5 w-3.5 text-muted-foreground" />
             <div>
-              <label className="text-sm font-medium text-foreground">Overlay Transparency</label>
+              <label className="text-sm font-medium text-foreground">{t("Overlay Transparency")}</label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                How transparent the overlay background is
+                {t("How transparent the overlay background is")}
               </p>
             </div>
           </div>
@@ -169,8 +192,8 @@ export function GeneralSettings() {
           className="w-full h-1.5 rounded-full appearance-none bg-secondary cursor-pointer accent-primary"
         />
         <div className="flex justify-between mt-1">
-          <span className="text-[10px] text-muted-foreground/50">Transparent</span>
-          <span className="text-[10px] text-muted-foreground/50">Solid</span>
+          <span className="text-[10px] text-muted-foreground/50">{t("Transparent")}</span>
+          <span className="text-[10px] text-muted-foreground/50">{t("Solid")}</span>
         </div>
       </div>
 
@@ -178,16 +201,16 @@ export function GeneralSettings() {
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
         <div className="mb-3">
           <label className="text-sm font-medium text-foreground">
-            Data Directory
+            {t("Data Directory")}
           </label>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Where meeting data and recordings are stored
+            {t("Where meeting data and recordings are stored")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex-1 rounded-lg border border-border/50 bg-secondary/30 px-3.5 py-2.5">
             <p className="truncate text-xs text-muted-foreground">
-              {dataDirectory || "Default app data directory"}
+              {dataDirectory || t("Default app data directory")}
             </p>
           </div>
           <button

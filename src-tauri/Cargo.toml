@@ -1,6 +1,6 @@
 [package]
 name = "nexq"
-version = "2.28.0"
+version = "2.28.3"
 description = "AI Meeting Assistant & Real-Time Interview Copilot"
 authors = ["NexQ"]
 edition = "2021"
@@ -33,18 +33,16 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
 async-trait = "0.1"
 futures = "0.3"
-anyhow = "1"
 thiserror = "1"
 log = "0.4"
 hound = "3.5"
 pdf-extract = "0.12"
-lopdf = "0.42"
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+lopdf = "0.46"
+tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
 url = "2"
-base64 = "0.22"
 whisper-rs = "0.16"
-sha2 = "0.10"
-zip = "2"
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # load-dynamic: onnxruntime.dll is bundled and loaded on first use (see src/ort_runtime.rs)
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "api-24", "load-dynamic"] }
 ndarray = "0.17"  # Must match ort's ndarray version
@@ -89,7 +87,6 @@ windows = { version = "0.58", features = [
     "Win32_System_Variant",
     "Win32_System_LibraryLoader",
 ] }
-wasapi = "0.22"
 
 # macOS-specific
 [target.'cfg(target_os = "macos")'.dependencies]

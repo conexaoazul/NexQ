@@ -2,7 +2,7 @@
 //
 // Handles non-streaming models like SenseVoice and Parakeet TDT (NeMo CTC)
 // by accumulating audio chunks, writing them to a temp WAV file, and running
-// `sherpa-onnx-offline.exe` on each batch.
+// the `sherpa-onnx-offline` program on each batch.
 //
 // This is inherently higher-latency than streaming (3–5s chunk delay) but
 // supports the full range of sherpa-onnx non-streaming model architectures.
@@ -41,7 +41,7 @@ enum AudioMessage {
 
 /// Sherpa-ONNX offline (batch) STT provider.
 pub struct SherpaOfflineSTT {
-    /// Path to the sherpa-onnx-offline.exe binary.
+    /// Path to the sherpa-onnx offline program.
     binary_path: PathBuf,
     /// Path to model.onnx or model.int8.onnx.
     model_path: PathBuf,
@@ -515,8 +515,21 @@ fn write_wav(path: &std::path::Path, samples: &[i16], sample_rate: u32) -> std::
     Ok(())
 }
 
-/// Find the sherpa-onnx-offline.exe binary in the sherpa_onnx models directory.
-/// Searches for `sherpa-onnx-v*/bin/sherpa-onnx-offline.exe` under the models base dir.
+/// The sherpa-onnx offline program's file name on this platform.
+pub const OFFLINE_BINARY: &str = if cfg!(windows) { "sherpa-onnx-offline.exe" } else { "sherpa-onnx-offline" };
+
+/// Why a CTC or SenseVoice model can't start, for the Dev Log. NexQ doesn't
+/// download the program those models run through.
+pub fn missing_binary_message(models_base_dir: &std::path::Path) -> String {
+    format!(
+        "This model runs through the sherpa-onnx offline program ({OFFLINE_BINARY}), which NexQ doesn't download. \
+         Use Parakeet TDT 0.6B v3, which runs inside NexQ, or place {OFFLINE_BINARY} in {}",
+        models_base_dir.join("sherpa_onnx").join("sherpa-onnx-v<version>").join("bin").display()
+    )
+}
+
+/// Find the sherpa-onnx offline program in the sherpa_onnx models directory:
+/// `sherpa-onnx-v*/bin/` + [`OFFLINE_BINARY`] under the models base dir.
 pub fn find_offline_binary(models_base_dir: &std::path::Path) -> Option<PathBuf> {
     let sherpa_dir = models_base_dir.join("sherpa_onnx");
     if !sherpa_dir.is_dir() {
@@ -527,7 +540,7 @@ pub fn find_offline_binary(models_base_dir: &std::path::Path) -> Option<PathBuf>
         for entry in entries.filter_map(|e| e.ok()) {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.starts_with("sherpa-onnx-v") && entry.path().is_dir() {
-                let binary = entry.path().join("bin").join("sherpa-onnx-offline.exe");
+                let binary = entry.path().join("bin").join(OFFLINE_BINARY);
                 if binary.exists() {
                     return Some(binary);
                 }
@@ -536,4 +549,23 @@ pub fn find_offline_binary(models_base_dir: &std::path::Path) -> Option<PathBuf>
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_the_offline_program_under_its_platform_name() {
+        let models = std::env::temp_dir().join(format!("nexq-sherpa-offline-{}", std::process::id()));
+        let bin = models.join("sherpa_onnx").join("sherpa-onnx-v1.12.0").join("bin");
+        let _ = std::fs::remove_dir_all(&models);
+        std::fs::create_dir_all(&bin).unwrap();
+        assert_eq!(find_offline_binary(&models), None);
+        std::fs::write(bin.join(OFFLINE_BINARY), b"").unwrap();
+        assert_eq!(find_offline_binary(&models), Some(bin.join(OFFLINE_BINARY)));
+        assert_eq!(OFFLINE_BINARY.ends_with(".exe"), cfg!(windows));
+        assert!(missing_binary_message(&models).contains("Parakeet TDT 0.6B v3"));
+        let _ = std::fs::remove_dir_all(&models);
+    }
 }

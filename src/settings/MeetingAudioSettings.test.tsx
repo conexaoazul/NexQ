@@ -38,13 +38,14 @@ beforeEach(() => useConfigStore.setState({ meetingAudioConfig: initialConfig }))
 afterEach(cleanup);
 
 describe.each([
-  { surface: "settings", Component: MeetingAudioSettings },
-  { surface: "wizard", Component: AudioSetupStep },
-])("$surface audio source selection", ({ Component }) => {
+  // The settings screen still uses legacy English labels; the new wizard defaults to PT-BR.
+  { surface: "settings", Component: MeetingAudioSettings, groupOutput: "Speakers / Output", groupInput: "Microphones" },
+  { surface: "wizard", Component: AudioSetupStep, groupOutput: "Alto-falantes / Saída", groupInput: "Microfones" },
+])("$surface audio source selection", ({ Component, groupOutput, groupInput }) => {
   it.each(["you", "them"] as const)("keeps the %s input and output distinct when their names match", async (party) => {
     const user = userEvent.setup();
     const view = render(<Component />);
-    const group = await screen.findAllByRole("group", { name: "Speakers / Output" });
+    const group = await screen.findAllByRole("group", { name: groupOutput });
     const output = within(group[party === "you" ? 0 : 1]).getByRole<HTMLOptionElement>("option");
     const select = output.closest("select")!;
     await waitFor(() => expect(select).toBeEnabled());
@@ -58,11 +59,11 @@ describe.each([
 
     view.unmount();
     render(<Component />);
-    const restoredGroups = await screen.findAllByRole("group", { name: "Speakers / Output" });
+    const restoredGroups = await screen.findAllByRole("group", { name: groupOutput });
     const restoredOutput = within(restoredGroups[party === "you" ? 0 : 1]).getByRole<HTMLOptionElement>("option");
     expect(restoredOutput.selected).toBe(true);
     const restoredSelect = restoredOutput.closest("select")!;
-    const micGroup = within(restoredSelect).getByRole("group", { name: "Microphones" });
+    const micGroup = within(restoredSelect).getByRole("group", { name: groupInput });
     const input = within(micGroup).getByRole<HTMLOptionElement>("option");
     await waitFor(() => expect(restoredSelect).toBeEnabled());
     await user.selectOptions(restoredSelect, input);
@@ -79,7 +80,7 @@ describe.each([
   ])("uses the correct direction for the $party default", async ({ party, isInput }) => {
     const user = userEvent.setup();
     render(<Component />);
-    const groups = await screen.findAllByRole("group", { name: "Microphones" });
+    const groups = await screen.findAllByRole("group", { name: groupInput });
     const select = groups[party === "you" ? 0 : 1].closest("select")!;
     await waitFor(() => expect(select).toBeEnabled());
     await user.selectOptions(select, select.options[0]);
