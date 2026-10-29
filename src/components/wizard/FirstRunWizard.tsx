@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useConfigStore } from "../../stores/configStore";
+import { blueTr, useBlueUiLocale } from "../../lib/blueUiLocale";
 import { useMeetingStore } from "../../stores/meetingStore";
 import { WelcomeStep } from "./WelcomeStep";
 import { AudioSetupStep } from "./AudioSetupStep";
@@ -9,7 +10,7 @@ import { ReadyStep } from "./ReadyStep";
 import { ChevronLeft, ChevronRight, SkipForward } from "lucide-react";
 
 const STEP_COUNT = 5;
-const STEP_LABELS = ["Welcome", "Audio", "STT", "LLM", "Ready"];
+// Step labels are rendered contextually; keep STT and LLM as technical acronyms.
 
 interface DetectionData {
   ollamaRunning: boolean;
@@ -19,6 +20,8 @@ interface DetectionData {
 }
 
 export function FirstRunWizard() {
+  const locale = useBlueUiLocale();
+  const t = (value: string) => blueTr(value, locale);
   const setFirstRunCompleted = useConfigStore((s) => s.setFirstRunCompleted);
   const startMeetingFlow = useMeetingStore((s) => s.startMeetingFlow);
   const setSettingsOpen = useMeetingStore((s) => s.setSettingsOpen);
@@ -121,7 +124,7 @@ export function FirstRunWizard() {
             NexQ
           </span>
           <span className="text-sm text-muted-foreground/60 font-medium">
-            Setup
+            {t("Setup")}
           </span>
         </div>
 
@@ -137,7 +140,7 @@ export function FirstRunWizard() {
                 }
               }}
               className="group flex items-center gap-1"
-              aria-label={`Step ${i + 1}`}
+              aria-label={`${t("Step")} ${i + 1}`}
               aria-current={currentStep === i ? "step" : undefined}
             >
               <div
@@ -155,7 +158,7 @@ export function FirstRunWizard() {
 
         {/* Step label */}
         <span className="text-xs font-medium text-muted-foreground/70">
-          Step {currentStep + 1} of {STEP_COUNT}
+          {t("Step")} {currentStep + 1} {t("of")} {STEP_COUNT}
         </span>
       </header>
 
@@ -204,7 +207,7 @@ export function FirstRunWizard() {
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <ChevronLeft className="h-4 w-4" />
-              Back
+              {t("Back")}
             </button>
           )}
         </div>
@@ -217,7 +220,7 @@ export function FirstRunWizard() {
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <SkipForward className="h-3.5 w-3.5" />
-              Skip
+              {t("Skip")}
             </button>
           )}
 
@@ -228,7 +231,7 @@ export function FirstRunWizard() {
               disabled={!canNext}
               className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Next
+              {t("Next")}
               <ChevronRight className="h-4 w-4" />
             </button>
           )}
