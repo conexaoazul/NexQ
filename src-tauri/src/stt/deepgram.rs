@@ -16,8 +16,8 @@ use futures::stream::SplitSink;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -82,6 +82,66 @@ pub struct ConnectionStatusEvent {
     pub message: Option<String>,
 }
 
+/// Sample rate of the audio sent to Deepgram (`sample_rate=16000`, mono).
+const SAMPLE_RATE: u64 = 16_000;
+
+/// Maps Deepgram's clock (how much audio it has received on this connection)
+/// to wall-clock time. Silence isn't sent, so that clock skips every pause:
+/// each point where sending resumes records the wall-clock time of the audio
+/// at that offset.
+struct AudioTimeline {
+    /// Samples sent on this connection.
+    sent_samples: u64,
+    /// (audio offset ms, epoch ms of that audio) where sending resumed, ascending.
+    resumes: Vec<(u64, u64)>,
+    /// Whether the previous chunk was left out (or none was sent yet).
+    paused: bool,
+}
+
+impl AudioTimeline {
+    /// Resume points kept: results only ever refer to recent audio.
+    const MAX_RESUMES: usize = 1024;
+
+    fn new() -> Self {
+        Self { sent_samples: 0, resumes: Vec::new(), paused: true }
+    }
+
+    fn sent_ms(&self) -> u64 {
+        self.sent_samples * 1000 / SAMPLE_RATE
+    }
+
+    /// A chunk of `samples` was sent; its audio was captured ending at `captured_at_ms`.
+    fn sent(&mut self, samples: u64, captured_at_ms: u64) {
+        if self.paused {
+            let start_ms = captured_at_ms.saturating_sub(samples * 1000 / SAMPLE_RATE);
+            self.resumes.push((self.sent_ms(), start_ms));
+            if self.resumes.len() > Self::MAX_RESUMES {
+                self.resumes.drain(..Self::MAX_RESUMES / 2);
+            }
+            self.paused = false;
+        }
+        self.sent_samples += samples;
+    }
+
+    /// A chunk was left out (silence).
+    fn skipped(&mut self) {
+        self.paused = true;
+    }
+
+    /// Wall-clock time of the audio at `offset_ms` on Deepgram's clock.
+    fn epoch_at(&self, offset_ms: u64) -> Option<u64> {
+        let &(audio_ms, epoch_ms) = self.resumes.iter().rev().find(|(audio_ms, _)| *audio_ms <= offset_ms)?;
+        Some(epoch_ms + (offset_ms - audio_ms))
+    }
+}
+
+fn epoch_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// Deepgram streaming STT provider.
 pub struct DeepgramSTT {
     api_key: String,
@@ -93,7 +153,8 @@ pub struct DeepgramSTT {
     /// Channel to send audio data to the WebSocket writer task
     audio_tx: Option<mpsc::Sender<Vec<u8>>>,
     stop_flag: Arc<AtomicBool>,
-    start_time: Option<Instant>,
+    /// Deepgram's clock vs wall-clock time, for the current connection.
+    timeline: Arc<Mutex<AudioTimeline>>,
     /// Party label for status events ("You" or "Them")
     party: String,
     /// App handle for emitting status events
@@ -146,7 +207,7 @@ impl DeepgramSTT {
             result_tx: None,
             audio_tx: None,
             stop_flag: Arc::new(AtomicBool::new(false)),
-            start_time: None,
+            timeline: Arc::new(Mutex::new(AudioTimeline::new())),
             party: "Them".to_string(),
             app_handle: None,
             connection_state: Arc::new(AtomicU8::new(0)),
@@ -300,7 +361,7 @@ impl DeepgramSTT {
     fn parse_response(
         json_str: &str,
         speaker: &str,
-        start_time: Instant,
+        timeline: &AudioTimeline,
     ) -> Option<TranscriptResult> {
         let response: DeepgramResponse = serde_json::from_str(json_str).ok()?;
 
@@ -338,20 +399,15 @@ impl DeepgramSTT {
             );
         }
 
-        // Convert Deepgram's stream-relative offset to epoch timestamp.
-        // The frontend expects epoch timestamps (consistent with Web Speech's Date.now()).
-        let stream_offset_ms = response
+        // Epoch time the speech started (the frontend orders lines by it, and
+        // the pause before it decides whether it starts a new line). `start`
+        // is on Deepgram's clock, which skips the silence NexQ doesn't send;
+        // without a mapping, the result arrived about when the speech ended.
+        let duration_ms = response.duration.map(|d| (d.max(0.0) * 1000.0).round() as u64);
+        let timestamp_ms = response
             .start
-            .map(|s| (s * 1000.0) as u64)
-            .unwrap_or_else(|| start_time.elapsed().as_millis() as u64);
-        let epoch_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        // Use current epoch minus the difference between elapsed and stream offset
-        // to get the approximate epoch time of when this segment started.
-        let elapsed_ms = start_time.elapsed().as_millis() as u64;
-        let timestamp_ms = epoch_ms.saturating_sub(elapsed_ms.saturating_sub(stream_offset_ms));
+            .and_then(|s| timeline.epoch_at((s.max(0.0) * 1000.0) as u64))
+            .unwrap_or_else(|| epoch_now_ms().saturating_sub(duration_ms.unwrap_or(0)));
 
         Some(TranscriptResult {
             text,
@@ -361,7 +417,7 @@ impl DeepgramSTT {
             speaker: Some(speaker.to_string()),
             language: None,
             segment_id: None,
-            duration_ms: response.duration.map(|d| (d.max(0.0) * 1000.0).round() as u64),
+            duration_ms,
             speaker_tag,
         })
     }
@@ -375,7 +431,7 @@ impl DeepgramSTT {
         result_tx: mpsc::Sender<TranscriptResult>,
         speaker: String,
         stop_flag: Arc<AtomicBool>,
-        start_time: Instant,
+        timeline: Arc<Mutex<AudioTimeline>>,
         connection_state: Arc<AtomicU8>,
         app_handle: Option<tauri::AppHandle>,
         diarize_enabled: bool,
@@ -392,9 +448,11 @@ impl DeepgramSTT {
 
                 match msg_result {
                     Ok(Message::Text(text)) => {
-                        if let Some(result) =
-                            Self::parse_response(&text, &speaker, start_time)
-                        {
+                        let parsed = {
+                            let timeline = timeline.lock().unwrap_or_else(|e| e.into_inner());
+                            Self::parse_response(&text, &speaker, &timeline)
+                        };
+                        if let Some(result) = parsed {
                             // Emit speaker_detected for new diarization speaker IDs
                             // (in-person mode adds them as speakers; online mode
                             // ignores the event and labels lines by tag instead).
@@ -595,8 +653,8 @@ impl STTProvider for DeepgramSTT {
 
         let (write_half, read_half) = ws_stream.split();
 
-        let start_time = Instant::now();
-        self.start_time = Some(start_time);
+        // Deepgram's clock starts at zero on every connection.
+        self.timeline = Arc::new(Mutex::new(AudioTimeline::new()));
         // Cancel any tasks from a previous connection before starting a new one.
         // The reader/writer tasks each capture their own Arc clone of `stop_flag`,
         // so replacing it guarantees a stale connection can no longer push results
@@ -616,7 +674,7 @@ impl STTProvider for DeepgramSTT {
             result_tx,
             self.party.clone(),
             Arc::clone(&self.stop_flag),
-            start_time,
+            Arc::clone(&self.timeline),
             Arc::clone(&self.connection_state),
             self.app_handle.clone(),
             self.diarize_active(),
@@ -678,11 +736,16 @@ impl STTProvider for DeepgramSTT {
                 .map(|&s| (s as f64) * (s as f64))
                 .sum::<f64>() / chunk.pcm_data.len() as f64;
             if rms.sqrt() < 0.5 {
+                self.timeline.lock().unwrap_or_else(|e| e.into_inner()).skipped();
                 return Ok(());
             }
         }
 
         let audio_bytes = Self::pcm_to_bytes(&chunk.pcm_data);
+        self.timeline
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sent(chunk.pcm_data.len() as u64, chunk.timestamp_ms);
 
         if let Some(ref tx) = self.audio_tx {
             if tx.send(audio_bytes).await.is_err() {
@@ -715,7 +778,6 @@ impl STTProvider for DeepgramSTT {
         self.audio_tx = None;
         self.result_tx = None;
         self.is_streaming = false;
-        self.start_time = None;
         self.connection_state.store(0, Ordering::SeqCst);
 
         Self::emit_status(&self.app_handle, &self.party, "disconnected", None);
@@ -836,7 +898,7 @@ mod tests {
 
     #[test]
     fn parse_reads_duration_and_dominant_speaker_tag() {
-        let r = DeepgramSTT::parse_response(&results_json(1.5, 4.23, &[1, 0, 1]), "Them", Instant::now()).unwrap();
+        let r = DeepgramSTT::parse_response(&results_json(1.5, 4.23, &[1, 0, 1]), "Them", &AudioTimeline::new()).unwrap();
         assert_eq!(r.text, "hello world");
         assert!(r.is_final);
         assert_eq!(r.duration_ms, Some(4_230));
@@ -844,12 +906,64 @@ mod tests {
         assert_eq!(r.speaker_tag.as_deref(), Some("S2"));
     }
 
+    /// 0.1 s of 16 kHz audio.
+    const CHUNK: u64 = 1_600;
+
+    #[test]
+    fn timeline_maps_deepgram_time_across_skipped_silence() {
+        let t0 = 1_800_000_000_000;
+        let mut tl = AudioTimeline::new();
+        // 3 s of speech captured from t0, then 97 s of silence left out.
+        for i in 1..=30 {
+            tl.sent(CHUNK, t0 + i * 100);
+        }
+        for _ in 0..970 {
+            tl.skipped();
+        }
+        // Speech resumes 100 s after t0 (Deepgram's clock only reached 3 s).
+        tl.sent(CHUNK, t0 + 100_100);
+        assert_eq!(tl.epoch_at(1_500), Some(t0 + 1_500));
+        assert_eq!(tl.epoch_at(3_050), Some(t0 + 100_050));
+    }
+
+    #[test]
+    fn a_reply_after_a_long_silence_gets_its_own_line() {
+        let t0 = 1_800_000_000_000;
+        let mut tl = AudioTimeline::new();
+        for i in 1..=30 {
+            tl.sent(CHUNK, t0 + i * 100);
+        }
+        tl.skipped();
+        for i in 1..=30 {
+            tl.sent(CHUNK, t0 + 100_000 + i * 100);
+        }
+        let first = DeepgramSTT::parse_response(&results_json(0.0, 2.9, &[]), "Them", &tl).unwrap();
+        let late = DeepgramSTT::parse_response(&results_json(3.0, 2.5, &[]), "Them", &tl).unwrap();
+        assert_eq!(first.timestamp_ms, t0);
+        assert_eq!(late.timestamp_ms, t0 + 100_000);
+
+        let mut acc = crate::stt::segment_accumulator::SegmentAccumulator::new(3_000);
+        let lines: Vec<String> = [first, late]
+            .into_iter()
+            .flat_map(|r| acc.feed_result(r))
+            .map(|o| o.id)
+            .collect();
+        assert_ne!(lines.first(), lines.last(), "the late reply starts a new line");
+    }
+
+    #[test]
+    fn without_a_mapping_a_result_is_dated_by_its_arrival() {
+        let before = epoch_now_ms();
+        let r = DeepgramSTT::parse_response(&results_json(5.0, 2.0, &[]), "Them", &AudioTimeline::new()).unwrap();
+        assert!(r.timestamp_ms + 2_000 >= before && r.timestamp_ms <= epoch_now_ms());
+    }
+
     #[test]
     fn parse_without_diarization_has_no_tag() {
-        let r = DeepgramSTT::parse_response(&results_json(0.0, 1.0, &[]), "Them", Instant::now()).unwrap();
+        let r = DeepgramSTT::parse_response(&results_json(0.0, 1.0, &[]), "Them", &AudioTimeline::new()).unwrap();
         assert_eq!(r.speaker_tag, None);
         // Tie between speakers 0 and 3: the lower id wins (stable across calls).
-        let r = DeepgramSTT::parse_response(&results_json(0.0, 1.0, &[3, 0]), "Them", Instant::now()).unwrap();
+        let r = DeepgramSTT::parse_response(&results_json(0.0, 1.0, &[3, 0]), "Them", &AudioTimeline::new()).unwrap();
         assert_eq!(r.speaker_tag.as_deref(), Some("S1"));
     }
 
