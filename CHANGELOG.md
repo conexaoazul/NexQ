@@ -1,3 +1,11 @@
+## [2.28.3](https://github.com/naxhq/NexQ/compare/v2.28.2...v2.28.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **llm:** Anthropic lists the models your key can use, and current models work ([b50d0f7](https://github.com/naxhq/NexQ/commit/b50d0f7166957efd0e795c8ada01ca77465cbf52)), closes [#37](https://github.com/naxhq/NexQ/issues/37)
+* **stt:** Deepgram speech after a long pause starts a new transcript line ([f4e5d76](https://github.com/naxhq/NexQ/commit/f4e5d76a0fe03a8c5a3e6591597178af1175a395)), closes [#36](https://github.com/naxhq/NexQ/issues/36)
+* **stt:** find the sherpa-onnx offline program on macOS and Linux; log how NexQ quits ([d07e86a](https://github.com/naxhq/NexQ/commit/d07e86a642053c448d52538a09223c757f5bef14)), closes [#43](https://github.com/naxhq/NexQ/issues/43)
 ## [2.28.2](https://github.com/naxhq/NexQ/compare/v2.28.1...v2.28.2) (2026-10-28)
 
 
