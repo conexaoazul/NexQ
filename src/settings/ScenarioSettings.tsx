@@ -216,6 +216,8 @@ export function ScenarioSettings() {
   const setActiveScenario = useScenarioStore((s) => s.setActiveScenario);
   const updatePrompt = useScenarioStore((s) => s.updatePrompt);
   const resetScenarioOverrides = useScenarioStore((s) => s.resetScenarioOverrides);
+  const resetPromptOverride = useScenarioStore((s) => s.resetPromptOverride);
+  const updateCustomScenario = useScenarioStore((s) => s.updateCustomScenario);
   const createCustomScenario = useScenarioStore((s) => s.createCustomScenario);
   const deleteCustomScenario = useScenarioStore((s) => s.deleteCustomScenario);
   const cloneScenario = useScenarioStore((s) => s.cloneScenario);
@@ -446,28 +448,15 @@ export function ScenarioSettings() {
             isModified={isFieldModified(field.key)}
             onSave={(val) => {
               if (currentTemplate.is_custom) {
-                // For custom scenarios, update the scenario directly by cloning and re-creating
-                const updated: ScenarioTemplate = { ...currentTemplate, [field.key]: val };
-                deleteCustomScenario(activeScenarioId);
-                createCustomScenario(updated);
-                setActiveScenario(updated.id as AIScenario);
+                // Keep the custom scenario identity and other prompt fields intact.
+                updateCustomScenario(activeScenarioId, { [field.key]: val });
               } else {
                 updatePrompt(activeScenarioId, field.key, val);
               }
             }}
             onReset={() => {
               if (!currentTemplate.is_custom) {
-                // Remove this specific override
-                const state = useScenarioStore.getState();
-                const existing = { ...state.scenarioOverrides[activeScenarioId] };
-                delete existing[field.key];
-                if (Object.keys(existing).length === 0) {
-                  resetScenarioOverrides(activeScenarioId);
-                } else {
-                  updatePrompt(activeScenarioId, field.key, getDefaultValue(field.key) ?? "");
-                  // Immediately re-reset since updatePrompt would re-add it — use resetOverrides instead
-                  resetScenarioOverrides(activeScenarioId);
-                }
+                resetPromptOverride(activeScenarioId, field.key);
               }
             }}
           />
