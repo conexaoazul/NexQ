@@ -1,3 +1,27 @@
+## [2.28.3](https://github.com/naxhq/NexQ/compare/v2.28.2...v2.28.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **llm:** Anthropic lists the models your key can use, and current models work ([b50d0f7](https://github.com/naxhq/NexQ/commit/b50d0f7166957efd0e795c8ada01ca77465cbf52)), closes [#37](https://github.com/naxhq/NexQ/issues/37)
+* **stt:** Deepgram speech after a long pause starts a new transcript line ([f4e5d76](https://github.com/naxhq/NexQ/commit/f4e5d76a0fe03a8c5a3e6591597178af1175a395)), closes [#36](https://github.com/naxhq/NexQ/issues/36)
+* **stt:** find the sherpa-onnx offline program on macOS and Linux; log how NexQ quits ([d07e86a](https://github.com/naxhq/NexQ/commit/d07e86a642053c448d52538a09223c757f5bef14)), closes [#43](https://github.com/naxhq/NexQ/issues/43)
+## [2.28.2](https://github.com/naxhq/NexQ/compare/v2.28.1...v2.28.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **llm:** don't log the provider config (it contains the API key) ([#44](https://github.com/naxhq/NexQ/issues/44)) ([cf664e3](https://github.com/naxhq/NexQ/commit/cf664e322d16abc3d446b53c44ab88b3fc0ab358))
+* **logging:** mask a custom LLM provider's auth_value in the log ([ea5a3e0](https://github.com/naxhq/NexQ/commit/ea5a3e02fc67f9df920afe1b34dda13238b298c6))
+* **macos:** implement find_claude_binary for unix ([#42](https://github.com/naxhq/NexQ/issues/42)) ([ac8a941](https://github.com/naxhq/NexQ/commit/ac8a941c4e51660417596bc7e58bfb990efbd64a))
+* **stt:** don't panic when the Deepgram debug log truncates non-ASCII text ([#45](https://github.com/naxhq/NexQ/issues/45)) ([cb5740e](https://github.com/naxhq/NexQ/commit/cb5740ec9e68be0b742059c2bdf51162cd410971))
+* **stt:** Groq Whisper no longer panics on long non-English transcripts ([253e88a](https://github.com/naxhq/NexQ/commit/253e88a42344b8601743c680cf34a4128d8cf2f3))
+## [2.28.1](https://github.com/naxhq/NexQ/compare/v2.28.0...v2.28.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **stealth:** dashboard no longer turns into a white window when the meeting window comes up ([0a12b73](https://github.com/naxhq/NexQ/commit/0a12b733c17629076427dcb3acda23c5199a5704))
 # [2.28.0](https://github.com/naxhq/NexQ/compare/v2.27.2...v2.28.0) (2026-10-25)
 
 

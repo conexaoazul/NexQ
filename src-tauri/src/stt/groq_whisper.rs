@@ -361,11 +361,7 @@ impl GroqWhisperSTT {
                                 let text = text.trim().to_string();
                                 if !text.is_empty() {
                                     if let Some(handle) = app_handle {
-                                        let preview = if text.len() > 80 {
-                                            format!("{}...", &text[..77])
-                                        } else {
-                                            text.clone()
-                                        };
+                                        let preview = preview(&text, 80);
                                         super::emit_stt_debug(
                                             handle,
                                             "info",
@@ -409,11 +405,7 @@ impl GroqWhisperSTT {
                         body
                     );
                     if let Some(handle) = app_handle {
-                        let short = if body.len() > 120 {
-                            format!("{}...", &body[..117])
-                        } else {
-                            body
-                        };
+                        let short = preview(&body, 120);
                         super::emit_stt_debug(
                             handle,
                             "error",
@@ -827,5 +819,32 @@ impl STTProvider for GroqWhisperSTT {
     fn set_language(&mut self, language: &str) {
         self.config.language = language.to_string();
         log::info!("GroqWhisperSTT: Language set to {}", self.config.language);
+    }
+}
+
+/// `text` cut to at most `max` characters, ending in "..." when cut. Slicing
+/// bytes would panic inside a multi-byte character (Cyrillic, CJK, accented
+/// Latin) and stop the transcription.
+fn preview(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let kept: String = text.chars().take(max.saturating_sub(3)).collect();
+    format!("{kept}...")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_cuts_on_character_boundaries() {
+        // 76 ASCII bytes then 'р' (2 bytes): the old `&text[..77]` panicked here.
+        let text = format!("{}раз два три четыре пять", "a".repeat(76));
+        let cut = preview(&text, 80);
+        assert_eq!(cut.chars().count(), 80);
+        assert!(cut.ends_with("..."));
+        assert_eq!(preview("short", 80), "short");
+        assert_eq!(preview(&"é".repeat(80), 80), "é".repeat(80));
     }
 }

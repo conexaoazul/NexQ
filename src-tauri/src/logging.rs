@@ -332,7 +332,7 @@ fn last_lines(text: &str, max_lines: usize) -> &str {
 /// Google `AIza`, OpenRouter `sk-or-`, Deepgram/xAI style `xai-`).
 const KEY_PREFIXES: &[&str] = &["sk-", "gsk_", "AIza", "xai-"];
 /// Names whose value is a secret: `name=value`, `name: value`, `"name":"value"`.
-const SECRET_NAMES: &[&str] = &["api_key", "apikey", "api-key", "access_token", "token", "authorization", "password", "secret", "key"];
+const SECRET_NAMES: &[&str] = &["api_key", "apikey", "api-key", "auth_value", "access_token", "token", "authorization", "password", "secret", "key"];
 const REDACTED: &str = "[redacted]";
 
 fn is_token_char(c: char) -> bool {
@@ -439,6 +439,15 @@ mod tests {
         assert_eq!(redact("Authorization: Bearer abc.def-ghi_jkl123"), "Authorization: Bearer [redacted]");
         assert_eq!(redact("url?key=AIzaSyA1234567890abcdefghij&x=1"), "url?key=[redacted]&x=1");
         assert_eq!(redact(r#"{"api_key": "gsk_0123456789abcdefghijkl"}"#), r#"{"api_key": "[redacted]"}"#);
+        assert_eq!(
+            redact(r#"LLM provider set to: {"provider_type":"gemini","api_key":"AQ.Ab8RN6Lq0123456789abcdef"}"#),
+            r#"LLM provider set to: {"provider_type":"gemini","api_key":"[redacted]"}"#
+        );
+        // A custom provider's token has no known prefix.
+        assert_eq!(
+            redact(r#"{"provider_type":"custom","auth_value":"c0ffee0123456789abcdef"}"#),
+            r#"{"provider_type":"custom","auth_value":"[redacted]"}"#
+        );
         assert_eq!(redact("token=abcdefghijklmnopqrstuvwx"), "token=[redacted]");
     }
 
