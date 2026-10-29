@@ -42,7 +42,7 @@ tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
 url = "2"
 whisper-rs = "0.16"
 sha2 = "0.11"
-zip = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # load-dynamic: onnxruntime.dll is bundled and loaded on first use (see src/ort_runtime.rs)
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "api-24", "load-dynamic"] }
 ndarray = "0.17"  # Must match ort's ndarray version
