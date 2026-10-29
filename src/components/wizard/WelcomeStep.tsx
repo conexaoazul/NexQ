@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listAudioDevices } from "../../lib/ipc";
+import { blueTr, useBlueUiLocale } from "../../lib/blueUiLocale";
 import type { AudioDeviceList } from "../../lib/types";
 import {
   Mic,
@@ -30,6 +31,8 @@ type DetectionPhase =
   | "complete";
 
 export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
+  const locale = useBlueUiLocale();
+  const t = (value: string) => blueTr(value, locale);
   const [phase, setPhase] = useState<DetectionPhase>("starting");
   const [result, setResult] = useState<DetectionResult>({
     audioDevices: null,
@@ -147,11 +150,12 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
           <Sparkles className="h-8 w-8 text-primary" />
         </div>
         <h2 className="text-2xl font-semibold text-foreground">
-          Welcome to NexQ
+          {t("Welcome to NexQ")}
         </h2>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          Let's get your AI meeting assistant set up. This will only take a
-          minute.
+          {locale === "pt-BR"
+            ? "Vamos configurar o assistente de reuniões da Conexão Azul."
+            : "Let's get your AI meeting assistant set up. This will only take a minute."}
         </p>
       </div>
 
@@ -160,7 +164,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
         {/* Audio detection */}
         <DetectionRow
           icon={<Mic className="h-4 w-4" />}
-          label="Audio Devices"
+          label={t("Audio Devices")}
           status={
             phaseIndex < 1
               ? "pending"
@@ -179,7 +183,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
         {/* Ollama detection */}
         <DetectionRow
           icon={<Server className="h-4 w-4" />}
-          label="Ollama (Local LLM)"
+          label={t("Ollama (Local LLM)")}
           status={
             phaseIndex < 2
               ? "pending"
@@ -191,7 +195,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
             phaseIndex > 2
               ? result.ollamaRunning
                 ? `Running with ${result.ollamaModels.length} model${result.ollamaModels.length !== 1 ? "s" : ""}`
-                : "Not detected"
+                : t("Not detected")
               : undefined
           }
           found={phaseIndex > 2 && result.ollamaRunning}
@@ -200,7 +204,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
         {/* LM Studio detection */}
         <DetectionRow
           icon={<Server className="h-4 w-4" />}
-          label="LM Studio (Local LLM)"
+          label={t("LM Studio (Local LLM)")}
           status={
             phaseIndex < 3
               ? "pending"
@@ -212,7 +216,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
             phaseIndex > 3
               ? result.lmStudioRunning
                 ? `Running with ${result.lmStudioModels.length} model${result.lmStudioModels.length !== 1 ? "s" : ""}`
-                : "Not detected"
+                : t("Not detected")
               : undefined
           }
           found={phaseIndex > 3 && result.lmStudioRunning}
@@ -226,13 +230,15 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
             <p className="text-sm text-muted-foreground leading-relaxed">
               {result.ollamaRunning || result.lmStudioRunning ? (
                 <span className="text-success">
-                  Local LLM detected! You can use AI features without an
-                  internet connection.
+                  {locale === "pt-BR"
+                    ? "IA local detectada! Você pode usar os recursos de IA sem conexão com a internet."
+                    : "Local LLM detected! You can use AI features without an internet connection."}
                 </span>
               ) : (
                 <span>
-                  No local LLM found. You can configure a cloud provider in the
-                  next steps, or install Ollama later.
+                  {locale === "pt-BR"
+                    ? "Nenhuma IA local detectada. Configure um provedor autorizado nas próximas etapas ou instale o Ollama depois."
+                    : "No local LLM found. You can configure a cloud provider in the next steps, or install Ollama later."}
                 </span>
               )}
             </p>
